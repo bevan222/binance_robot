@@ -2,8 +2,10 @@ import os
 import time
 from binance.client import Client
 from datetime import datetime
+from dotenv import load_dotenv
 import csv
 
+load_dotenv()
 
 def date_to_string(date_to_convert):
     date_str = ""
@@ -18,8 +20,8 @@ def date_to_string(date_to_convert):
     return(date_str)
 
 
-api_key = 'Tgz26uDDAnWzURJqZ56zbfsrMS0X4RTOm8R0g3HWCzcAZj0aSqGh4zJb95RW9aW4'
-api_secret = 'Rxe7P6hTf64ySbpFkYr9UaOSOaNPlMi1a1uFU4JqasDEIfu55ftSqYuGCVbhJzY5'
+api_key = os.getenv("API_KEY")
+api_secret = os.getenv("PRIVATE_KEY")
 client = Client(api_key, api_secret)
 
 #open time
