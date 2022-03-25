@@ -1,10 +1,12 @@
+from http import client
 import os
 import time
 from binance.client import Client
 from datetime import datetime
 from dotenv import load_dotenv
 import csv
-from binance.futures import Futures 
+from binance.futures import Futures
+from flask import jsonify 
 
 
 load_dotenv()
@@ -98,16 +100,20 @@ class volume_robot:
         elif(self.minute_price_change_rate()==0):
             position_side = 'BUY'
             close_side = 'SELL'
-        
+
         if(float(self.position_amount() ==0)):
             #該機器人合約幣種現在無倉位
             print("no position")
         elif(float(self.position_amount() <0)):
-            #該機器人合約幣種現在有多頭倉位
+            #該機器人合約幣種現在有多頭倉位，所以有往上賣單往下賣單
             print("position buy")
+            self.client_future.cancel_open_orders(symbol=self.ticker)#有新買點更新止盈止損
+
+            
         elif(float(self.position_amount() >0)):
-            #該機器人合約幣種現在現在有空頭倉位
+            #該機器人合約幣種現在現在有空頭倉位，所以有往下買單往上買單
             print("position sell")
+            self.client_future.cancel_open_orders(symbol=self.ticker)#有新賣點更新止盈止損
         
         self.client.futures_create_order(
             symbol=self.ticker,
@@ -126,6 +132,7 @@ class volume_robot:
             closePosition=True,
         )
 
+
         self.client.futures_create_order(
             symbol=self.ticker,
             type='STOP_MARKET',
@@ -133,17 +140,7 @@ class volume_robot:
             stopPrice=round(open_price*0.99,2),
             closePosition=True,
         )
-        """ 
-        self.client.futures_create_order(
-            symbol=self.ticker,
-            side=side,
-            type='LIMIT',
-            quantity=quantity,
-            price=new_price,
-            timeInForce='GTC',
-            ReduceOnly=True
-        )
-        """
+
 
 
 def date_to_string(date_to_convert):
@@ -170,7 +167,20 @@ print(robot.leverage)
 print(robot.client.futures_position_information(symbol=robot.ticker))
 print(robot.client_future.api_trading_status())
 
-#robot.show_volume_list()
+
+robot.client.futures_create_order(
+    symbol=robot.ticker,
+    type='MARKET',
+    side='BUY',  # Direction ('BUY' / 'SELL'), string
+    quantity=0.003  # Number of coins you wish to buy / sell, float
+)
+
+robot.client.futures_create_order(
+    symbol=robot.ticker,
+    type='MARKET',
+    side='SELL',  # Direction ('BUY' / 'SELL'), string
+    quantity=0.006  # Number of coins you wish to buy / sell, float
+)
 
 
 while True:
