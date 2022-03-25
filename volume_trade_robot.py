@@ -6,7 +6,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 import csv
 from binance.futures import Futures
-from flask import jsonify 
 
 
 load_dotenv()
@@ -91,55 +90,142 @@ class volume_robot:
     def create_order(self):
         #trade = self.client.futures_account_trades()[-1] #it fetch details of latest trade
         self.client.futures_change_leverage(symbol=self.ticker, leverage=self.leverage)
-        if(self.minute_price_change_rate()>0):
-            position_side = 'BUY'
-            close_side = 'SELL'
-        elif(self.minute_price_change_rate()<0):
-            position_side = 'SELL'
-            close_side = 'BUY'
-        elif(self.minute_price_change_rate()==0):
-            position_side = 'BUY'
-            close_side = 'SELL'
 
         if(float(self.position_amount() ==0)):
             #該機器人合約幣種現在無倉位
             print("no position")
-        elif(float(self.position_amount() <0)):
+            if(self.minute_price_change_rate()>0):
+                position_side = 'BUY'
+                close_side = 'SELL'
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='MARKET',
+                    side=position_side,  # Direction ('BUY' / 'SELL'), string
+                    quantity=0.005  # Number of coins you wish to buy / sell, float
+                )
+                time.sleep(3)
+                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                print(open_price)
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='TAKE_PROFIT_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*1.01,2),
+                    closePosition=True,
+                )
+
+
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='STOP_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*0.99,2),
+                    closePosition=True,
+                )
+
+            elif(self.minute_price_change_rate()<0):
+                position_side = 'SELL'
+                close_side = 'BUY'
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='MARKET',
+                    side=position_side,  # Direction ('BUY' / 'SELL'), string
+                    quantity=0.005  # Number of coins you wish to buy / sell, float
+                )
+                time.sleep(3)
+                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                print(open_price)
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='STOP_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*1.01,2),
+                    closePosition=True,
+                )
+
+
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='TAKE_PROFIT_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*0.99,2),
+                    closePosition=True,
+                )
+
+            
+            
+
+        elif(float(self.position_amount() > 0)):
             #該機器人合約幣種現在有多頭倉位，所以有往上賣單往下賣單
             print("position buy")
             self.client_future.cancel_open_orders(symbol=self.ticker)#有新買點更新止盈止損
-
+            if(self.minute_price_change_rate()>0):
+                position_side = 'BUY'
+                close_side = 'SELL'
             
-        elif(float(self.position_amount() >0)):
+                self.client.futures_create_order(
+                symbol=self.ticker,
+                type='MARKET',
+                side=position_side,  # Direction ('BUY' / 'SELL'), string
+                quantity=0.005  # Number of coins you wish to buy / sell, float
+                )
+                time.sleep(3)
+                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                print(open_price)
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='TAKE_PROFIT_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*1.01,2),
+                    closePosition=True,
+                )
+
+
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='STOP_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*0.99,2),
+                    closePosition=True,
+                )
+            
+        elif(float(self.position_amount() < 0)):
             #該機器人合約幣種現在現在有空頭倉位，所以有往下買單往上買單
             print("position sell")
             self.client_future.cancel_open_orders(symbol=self.ticker)#有新賣點更新止盈止損
+            if(self.minute_price_change_rate() < 0):
+                position_side = 'SELL'
+                close_side = 'BUY'
+
+                self.client.futures_create_order(
+                symbol=self.ticker,
+                type='MARKET',
+                side=position_side,  # Direction ('BUY' / 'SELL'), string
+                quantity=0.005  # Number of coins you wish to buy / sell, float
+                )
+                time.sleep(3)
+                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                print(open_price)
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='STOP_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*1.01,2),
+                    closePosition=True,
+                )
+
+
+                self.client.futures_create_order(
+                    symbol=self.ticker,
+                    type='TAKE_PROFIT_MARKET',
+                    side=close_side,
+                    stopPrice=round(open_price*0.99,2),
+                    closePosition=True,
+                )
+            
+                
         
-        self.client.futures_create_order(
-            symbol=self.ticker,
-            type='MARKET',
-            side='BUY',  # Direction ('BUY' / 'SELL'), string
-            quantity=0.003  # Number of coins you wish to buy / sell, float
-        )
-        time.sleep(3)
-        open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-        print(open_price)
-        self.client.futures_create_order(
-            symbol=self.ticker,
-            type='TAKE_PROFIT_MARKET',
-            side='SELL',
-            stopPrice=round(open_price*1.01,2),
-            closePosition=True,
-        )
-
-
-        self.client.futures_create_order(
-            symbol=self.ticker,
-            type='STOP_MARKET',
-            side='SELL',
-            stopPrice=round(open_price*0.99,2),
-            closePosition=True,
-        )
+        
 
 
 
@@ -163,24 +249,10 @@ leverage = os.getenv("LEVERAGE")
 #get trade volume last 20 minutes
 robot  = volume_robot(os.getenv("TICKER"),api_key,api_secret,leverage)
 print(robot.leverage)
-#robot.create_order()
 print(robot.client.futures_position_information(symbol=robot.ticker))
-print(robot.client_future.api_trading_status())
 
 
-robot.client.futures_create_order(
-    symbol=robot.ticker,
-    type='MARKET',
-    side='BUY',  # Direction ('BUY' / 'SELL'), string
-    quantity=0.003  # Number of coins you wish to buy / sell, float
-)
-
-robot.client.futures_create_order(
-    symbol=robot.ticker,
-    type='MARKET',
-    side='SELL',  # Direction ('BUY' / 'SELL'), string
-    quantity=0.006  # Number of coins you wish to buy / sell, float
-)
+robot.client_future.cancel_open_orders(symbol=robot.ticker)
 
 
 while True:
@@ -195,14 +267,8 @@ while True:
         print("volume change rate 1 min: " + str(robot.minute_price_change_rate()))
     
         if(robot.voulume_break()):
-            if(robot.minute_price_change_rate()> 0):
-                #判斷該分鐘為漲
-                print()
-            elif(robot.minute_price_change_rate()< 0):
-                #判斷該分鐘為跌
-                print()
-                
-                
+            robot.create_order()
+                   
         print()
 
         if fetch_second == 59:
