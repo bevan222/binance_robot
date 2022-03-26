@@ -13,13 +13,14 @@ load_dotenv()
 class volume_robot:
 
     #初始化
-    def __init__(self,ticker,api_key,api_secret,leverage):
+    def __init__(self,ticker,api_key,api_secret,leverage,quantity):
         self.volume_list = []
         self.ticker = ticker
         self.side = 0
         self.client = Client(api_key, api_secret)
         self.client_future = Futures(key=api_key, secret=api_secret)
         self.leverage = leverage
+        self.quantity = quantity
 
         klines_20min_ago = self.client.get_historical_klines(ticker, Client.KLINE_INTERVAL_1MINUTE,'21 minutes ago UTC')
         for data in klines_20min_ago:
@@ -51,10 +52,10 @@ class volume_robot:
     def get_this_min_volume(self):
         fetch_time = datetime.now()  # using the local timezone
         fetch_second = int(fetch_time.strftime("%S"))
-        print(fetch_second)
         if(fetch_second != 0):
-            return float(self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')[0][5])
-
+            this_min_vol = float(self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')[0][5])
+            print(this_min_vol)
+            return this_min_vol
     #獲取過去20分交易量平均
     def get_20min_volume_average(self):
         volume_sum = sum(self.volume_list)
@@ -90,6 +91,9 @@ class volume_robot:
     def create_order(self):
         #trade = self.client.futures_account_trades()[-1] #it fetch details of latest trade
         self.client.futures_change_leverage(symbol=self.ticker, leverage=self.leverage)
+        if float(self.position_amount()) > self.quantity*4:
+            return 0
+
 
         if(float(self.position_amount() ==0)):
             #該機器人合約幣種現在無倉位
@@ -101,7 +105,7 @@ class volume_robot:
                     symbol=self.ticker,
                     type='MARKET',
                     side=position_side,  # Direction ('BUY' / 'SELL'), string
-                    quantity=0.005  # Number of coins you wish to buy / sell, float
+                    quantity=self.quantity  # Number of coins you wish to buy / sell, float
                 )
                 time.sleep(3)
                 open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
@@ -130,7 +134,7 @@ class volume_robot:
                     symbol=self.ticker,
                     type='MARKET',
                     side=position_side,  # Direction ('BUY' / 'SELL'), string
-                    quantity=0.005  # Number of coins you wish to buy / sell, float
+                    quantity=self.quantity  # Number of coins you wish to buy / sell, float
                 )
                 time.sleep(3)
                 open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
@@ -167,7 +171,7 @@ class volume_robot:
                 symbol=self.ticker,
                 type='MARKET',
                 side=position_side,  # Direction ('BUY' / 'SELL'), string
-                quantity=0.005  # Number of coins you wish to buy / sell, float
+                quantity=self.quantity  # Number of coins you wish to buy / sell, float
                 )
                 time.sleep(3)
                 open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
@@ -201,7 +205,7 @@ class volume_robot:
                 symbol=self.ticker,
                 type='MARKET',
                 side=position_side,  # Direction ('BUY' / 'SELL'), string
-                quantity=0.005  # Number of coins you wish to buy / sell, float
+                quantity=self.quantity  # Number of coins you wish to buy / sell, float
                 )
                 time.sleep(3)
                 open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
@@ -210,7 +214,7 @@ class volume_robot:
                     symbol=self.ticker,
                     type='STOP_MARKET',
                     side=close_side,
-                    stopPrice=round(open_price*1.01,2),
+                    stopPrice=round(open_price*1.003,2),
                     closePosition=True,
                 )
 
@@ -219,7 +223,7 @@ class volume_robot:
                     symbol=self.ticker,
                     type='TAKE_PROFIT_MARKET',
                     side=close_side,
-                    stopPrice=round(open_price*0.99,2),
+                    stopPrice=round(open_price*0.997,2),
                     closePosition=True,
                 )
             
@@ -244,10 +248,11 @@ def date_to_string(date_to_convert):
 api_key = os.getenv("API_KEY")
 api_secret = os.getenv("PRIVATE_KEY")
 leverage = os.getenv("LEVERAGE")
+quantity = os.getenv("QUANTITY")
 
 
 #get trade volume last 20 minutes
-robot  = volume_robot(os.getenv("TICKER"),api_key,api_secret,leverage)
+robot  = volume_robot(os.getenv("TICKER"),api_key,api_secret,leverage,quantity)
 print(robot.leverage)
 print(robot.client.futures_position_information(symbol=robot.ticker))
 
@@ -259,15 +264,19 @@ while True:
     fetch_time = datetime.now()  # using the local timezone
     fetch_second = int(fetch_time.strftime("%S"))
     robot.change_leverage(20)
-    this_min_vol = robot.get_this_min_volume()
     if fetch_second % 4 == 3:
+        this_min_vol = robot.get_this_min_volume()
         print(fetch_time.strftime("volume minute : "+"%Y-%m-%d %H:%M:%S"))  # 2018-04-07 20:48:08, YMMV
         print("volume this min : " + str(robot.get_this_min_volume()))
         print("volume average last 20 min: " + str(robot.get_20min_volume_average()))
         print("volume change rate 1 min: " + str(robot.minute_price_change_rate()))
     
-        if(robot.voulume_break()):
+        if robot.voulume_break():
             robot.create_order()
+            while fetch_second != 59  :
+                fetch_time = datetime.now()  # using the local timezone
+                fetch_second = int(fetch_time.strftime("%S"))
+                time.sleep(0.5)
                    
         print()
 
