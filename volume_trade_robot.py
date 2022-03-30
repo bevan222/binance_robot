@@ -1,12 +1,10 @@
-from http import client
 import os
 import time
+import math
 from binance.client import Client
 from datetime import datetime
 from dotenv import load_dotenv
-import csv
 from binance.futures import Futures
-
 
 load_dotenv()
 
@@ -33,9 +31,13 @@ class volume_robot:
 
     #該分鐘價格變化量（％）
     def minute_price_change_rate(self):
-        price_now = float(self.client.get_symbol_ticker(symbol=self.ticker)['price'])
-        price_open = float(self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')[0][1])
-        return (price_now - price_open)*100 / price_open
+        fetch_time = datetime.now()  # using the local timezone
+        fetch_second = int(fetch_time.strftime("%S"))
+        if fetch_second > 2:
+            price_now = float(self.client.get_symbol_ticker(symbol=self.ticker)['price'])
+            price_open = float(self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')[0][1])
+            return (price_now - price_open)*100 / price_open
+        return 0
         
     #抓取倉位大小
     def position_amount(self):
@@ -52,21 +54,28 @@ class volume_robot:
     def get_this_min_volume(self):
         fetch_time = datetime.now()  # using the local timezone
         fetch_second = int(fetch_time.strftime("%S"))
-        if(fetch_second != 0):
-            this_min_vol = float(self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')[0][5])
-            print(this_min_vol)
-            return this_min_vol
+        if(fetch_second > 2):
+            this_min_vol = self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')
+            if this_min_vol == []:
+                time.sleep(3)
+                #重抓
+                this_min_vol = float(self.client.get_historical_klines(self.ticker, Client.KLINE_INTERVAL_1MINUTE,'1 minutes ago UTC')[0][5])
+                return this_min_vol
+            else:
+                return float(this_min_vol[0][5])
+        return 0
+
     #獲取過去20分交易量平均
     def get_20min_volume_average(self):
         volume_sum = sum(self.volume_list)
-        return volume_sum//len(self.volume_list)
+        return volume_sum/float(len(self.volume_list))
 
     #檢測該分鐘交易量是否超過過去20分平均
     def voulume_break(self):
         fetch_time = datetime.now()  # using the local timezone
         fetch_second = int(fetch_time.strftime("%S"))
         if fetch_second != 0:
-            if(self.get_this_min_volume() > self.get_20min_volume_average()*2):
+            if(self.get_this_min_volume() > self.get_20min_volume_average()*2 and self.get_this_min_volume()>300):
                 return True
             else: 
                 return False
@@ -79,8 +88,8 @@ class volume_robot:
     #獲取該幣種歷史交易收入
     def get_income_sum(self):
         total_income = 0 
-        for income_history in robot.client_future.get_income_history():
-            if(income_history['symbol'] == robot.ticker):
+        for income_history in self.client_future.get_income_history():
+            if(income_history['symbol'] == self.ticker):
                 total_income += float(income_history['income'])
         return total_income
     
@@ -91,148 +100,250 @@ class volume_robot:
     def create_order(self):
         #trade = self.client.futures_account_trades()[-1] #it fetch details of latest trade
         self.client.futures_change_leverage(symbol=self.ticker, leverage=self.leverage)
-        if float(self.position_amount()) > self.quantity*4:
+        print("now position is : " + str(self.position_amount()))
+        if self.position_amount() >= self.quantity*5:
             return 0
 
-
-        if(float(self.position_amount() ==0)):
-            #該機器人合約幣種現在無倉位
-            print("no position")
-            if(self.minute_price_change_rate()>0):
-                position_side = 'BUY'
-                close_side = 'SELL'
-                self.client.futures_create_order(
+        if self.get_this_min_volume() > 400:
+            if(float(self.position_amount() ==0)):
+                #該機器人合約幣種現在無倉位
+                print("no position")
+                if(self.minute_price_change_rate()>0):
+                    position_side = 'BUY'
+                    close_side = 'SELL'
+                    self.client.futures_create_order(
                     symbol=self.ticker,
-                    type='MARKET',
-                    side=position_side,  # Direction ('BUY' / 'SELL'), string
-                    quantity=self.quantity  # Number of coins you wish to buy / sell, float
-                )
-                time.sleep(3)
-                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                print(open_price)
-                self.client.futures_create_order(
+                        type='MARKET',
+                        side=position_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=self.quantity  # Number of coins you wish to buy / sell, float
+                    )
+
+                    time.sleep(3)
+                    open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                    take_profit = round(open_price*1.002,2)
+                    take_loss = round(open_price*0.998,2)
+                    print("open at : " + str(open_price))
+                    print("take profit at : " + str(take_profit))
+                    print("take_loss at : " + str(take_loss))
+                    position_quatity = self.position_amount()
+                    print(position_quatity)
+
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_profit,
+                        timeInForce = 'GTC'
+                    )
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_loss,
+                        timeInForce = 'GTC'
+                    )
+
+                    """
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*1.01,2),
+                        closePosition=True,
+                    )
+
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*0.99,2),
+                        closePosition=True,
+                    )
+                    """
+
+                elif(self.minute_price_change_rate()<0):
+                    position_side = 'SELL'
+                    close_side = 'BUY'
+                    self.client.futures_create_order(
                     symbol=self.ticker,
-                    type='TAKE_PROFIT_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*1.01,2),
-                    closePosition=True,
-                )
+                        type='MARKET',
+                        side=position_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=self.quantity  # Number of coins you wish to buy / sell, float
+                    )
+
+                    time.sleep(3)
+                    open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                    take_profit = round(open_price*0.998,2)
+                    take_loss = round(open_price*1.002,2)
+                    print("open at : " + str(open_price))
+                    print("take profit at : " + str(take_profit))
+                    print("take_loss at : " + str(take_loss))
+                    position_quatity = abs(self.position_amount())
+                    print("position_quatity : " + str(position_quatity))
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_profit,
+                        timeInForce = 'GTC'
+                    )
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_loss,
+                        timeInForce = 'GTC'
+                    )
+                    """
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*1.01,2),
+                        closePosition=True,
+                    )
 
 
-                self.client.futures_create_order(
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*0.99,2),
+                        closePosition=True,
+                    )
+                    """
+
+            elif(float(self.position_amount() > 0)):
+                #該機器人合約幣種現在有多頭倉位，所以有往上賣單往下賣單
+                print("position buy")
+                #有新買點更新止盈止損
+                if(self.minute_price_change_rate()>0):
+                    self.client_future.cancel_open_orders(symbol=self.ticker)
+                    position_side = 'BUY'
+                    close_side = 'SELL'
+                    self.client.futures_create_order(
                     symbol=self.ticker,
-                    type='STOP_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*0.99,2),
-                    closePosition=True,
-                )
+                        type='MARKET',
+                        side=position_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=self.quantity  # Number of coins you wish to buy / sell, float
+                    )
 
-            elif(self.minute_price_change_rate()<0):
-                position_side = 'SELL'
-                close_side = 'BUY'
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='MARKET',
-                    side=position_side,  # Direction ('BUY' / 'SELL'), string
-                    quantity=self.quantity  # Number of coins you wish to buy / sell, float
-                )
-                time.sleep(3)
-                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                print(open_price)
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='STOP_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*1.01,2),
-                    closePosition=True,
-                )
+                    time.sleep(3)
+                    open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                    take_profit = round(open_price*1.002,2)
+                    take_loss = round(open_price*0.999,2)
+                    print("open at : " + str(open_price))
+                    print("take profit at : " + str(take_profit))
+                    print("take_loss at : " + str(take_loss))
+                    position_quatity = self.position_amount()
+                    print(position_quatity)
 
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_profit,
+                        timeInForce = 'GTC'
+                    )
 
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='TAKE_PROFIT_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*0.99,2),
-                    closePosition=True,
-                )
-
-            
-            
-
-        elif(float(self.position_amount() > 0)):
-            #該機器人合約幣種現在有多頭倉位，所以有往上賣單往下賣單
-            print("position buy")
-            self.client_future.cancel_open_orders(symbol=self.ticker)#有新買點更新止盈止損
-            if(self.minute_price_change_rate()>0):
-                position_side = 'BUY'
-                close_side = 'SELL'
-            
-                self.client.futures_create_order(
-                symbol=self.ticker,
-                type='MARKET',
-                side=position_side,  # Direction ('BUY' / 'SELL'), string
-                quantity=self.quantity  # Number of coins you wish to buy / sell, float
-                )
-                time.sleep(3)
-                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                print(open_price)
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='TAKE_PROFIT_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*1.01,2),
-                    closePosition=True,
-                )
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_loss,
+                        timeInForce = 'GTC'
+                    )
+                    """
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*1.01,2),
+                        closePosition=True,
+                    )
 
 
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='STOP_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*0.99,2),
-                    closePosition=True,
-                )
-            
-        elif(float(self.position_amount() < 0)):
-            #該機器人合約幣種現在現在有空頭倉位，所以有往下買單往上買單
-            print("position sell")
-            self.client_future.cancel_open_orders(symbol=self.ticker)#有新賣點更新止盈止損
-            if(self.minute_price_change_rate() < 0):
-                position_side = 'SELL'
-                close_side = 'BUY'
-
-                self.client.futures_create_order(
-                symbol=self.ticker,
-                type='MARKET',
-                side=position_side,  # Direction ('BUY' / 'SELL'), string
-                quantity=self.quantity  # Number of coins you wish to buy / sell, float
-                )
-                time.sleep(3)
-                open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                print(open_price)
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='STOP_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*1.003,2),
-                    closePosition=True,
-                )
-
-
-                self.client.futures_create_order(
-                    symbol=self.ticker,
-                    type='TAKE_PROFIT_MARKET',
-                    side=close_side,
-                    stopPrice=round(open_price*0.997,2),
-                    closePosition=True,
-                )
-            
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*0.99,2),
+                        closePosition=True,
+                    )
+                    """
                 
-        
-        
+            elif(float(self.position_amount() < 0)):
+                #該機器人合約幣種現在現在有空頭倉位，所以有往下買單往上買單
+                print("position sell")
+                if(self.minute_price_change_rate() < 0):
+                    self.client_future.cancel_open_orders(symbol=self.ticker)#有新賣點更新止盈止損
+                    position_side = 'SELL'
+                    close_side = 'BUY'
+                    self.client.futures_create_order(
+                    symbol=self.ticker,
+                        type='MARKET',
+                        side=position_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=self.quantity  # Number of coins you wish to buy / sell, float
+                    )
+
+                    time.sleep(3)
+                    open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
+                    take_profit = round(open_price*0.998,2)
+                    take_loss = round(open_price*1.002,2)
+                    print("open at : " + str(open_price))
+                    print("take profit at : " + str(take_profit))
+                    print("take_loss at : " + str(take_loss))
+                    position_quatity = abs(self.position_amount())
+                    print(position_quatity)
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_profit,
+                        timeInForce = 'GTC'
+                    )
+
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,  # Direction ('BUY' / 'SELL'), string
+                        quantity=position_quatity,  # Number of coins you wish to buy / sell, float
+                        stopPrice= take_loss,
+                        timeInForce = 'GTC'
+                    )
+
+                    """
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='STOP_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*1.003,2),
+                        closePosition=True,
+                    )
 
 
-
+                    self.client.futures_create_order(
+                        symbol=self.ticker,
+                        type='TAKE_PROFIT_MARKET',
+                        side=close_side,
+                        stopPrice=round(open_price*0.997,2),
+                        closePosition=True,
+                    )
+                    """
+            
 def date_to_string(date_to_convert):
     date_str = ""
     date_str += date_to_convert.strftime("%Y-")
@@ -244,20 +355,19 @@ def date_to_string(date_to_convert):
     print(date_str)
     return(date_str)
 
-
 api_key = os.getenv("API_KEY")
 api_secret = os.getenv("PRIVATE_KEY")
 leverage = os.getenv("LEVERAGE")
-quantity = os.getenv("QUANTITY")
-
+quantity = float(os.getenv("QUANTITY"))
+print(quantity)
 
 #get trade volume last 20 minutes
 robot  = volume_robot(os.getenv("TICKER"),api_key,api_secret,leverage,quantity)
 print(robot.leverage)
 print(robot.client.futures_position_information(symbol=robot.ticker))
+print(robot.position_amount())
 
 
-robot.client_future.cancel_open_orders(symbol=robot.ticker)
 
 
 while True:
@@ -276,7 +386,7 @@ while True:
             while fetch_second != 59  :
                 fetch_time = datetime.now()  # using the local timezone
                 fetch_second = int(fetch_time.strftime("%S"))
-                time.sleep(0.5)
+                time.sleep(0.3)
                    
         print()
 
@@ -284,13 +394,7 @@ while True:
             robot.update_volume(this_min_vol)
         time.sleep(1)
         
-        
-
-
 #get future account's balance
-
-
-
 # Get account information
 #client_future.change_position_mode(dualSidePosition=True)
 #client_future.get_position_risk(symbol=os.getenv("TICKER")) #get symbol's position
