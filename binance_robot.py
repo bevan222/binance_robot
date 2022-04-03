@@ -2,8 +2,6 @@ from decimal import Decimal
 import os
 import time
 import math
-from tkinter import BOTH
-from turtle import position
 from binance.client import Client
 from datetime import datetime
 from dotenv import load_dotenv
