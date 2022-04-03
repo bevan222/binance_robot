@@ -11,4 +11,4 @@
 - 7.ADD_PERCENTAGE(how much percentage the price change to buy)
 - 8.COIN_PRECISION(how many decimal count the coin can be buy)
 
-2.run changlun_copy.py
+2.run binance_robot.py
