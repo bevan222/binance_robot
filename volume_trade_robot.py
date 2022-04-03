@@ -120,8 +120,8 @@ class volume_robot:
 
                     time.sleep(3)
                     open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                    take_profit = round(open_price*1.002,2)
-                    take_loss = round(open_price*0.998,2)
+                    take_profit = round(open_price*(1+close_pecentage),2)
+                    take_loss = round(open_price*(1-close_pecentage),2)
                     print("open at : " + str(open_price))
                     print("take profit at : " + str(take_profit))
                     print("take_loss at : " + str(take_loss))
@@ -178,8 +178,8 @@ class volume_robot:
 
                     time.sleep(3)
                     open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                    take_profit = round(open_price*0.998,2)
-                    take_loss = round(open_price*1.002,2)
+                    take_profit = round(open_price*(1-close_pecentage),2)
+                    take_loss = round(open_price*(1+close_pecentage),2)
                     print("open at : " + str(open_price))
                     print("take profit at : " + str(take_profit))
                     print("take_loss at : " + str(take_loss))
@@ -239,8 +239,8 @@ class volume_robot:
 
                     time.sleep(3)
                     open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                    take_profit = round(open_price*1.002,2)
-                    take_loss = round(open_price*0.999,2)
+                    take_profit = round(open_price*(1+close_pecentage),2)
+                    take_loss = round(open_price*(1-close_pecentage),2)
                     print("open at : " + str(open_price))
                     print("take profit at : " + str(take_profit))
                     print("take_loss at : " + str(take_loss))
@@ -299,8 +299,8 @@ class volume_robot:
 
                     time.sleep(3)
                     open_price = float(self.client.futures_account_trades()[-1]['price'])#it fetch details of latest trade
-                    take_profit = round(open_price*0.998,2)
-                    take_loss = round(open_price*1.002,2)
+                    take_profit = round(open_price*(1-close_pecentage),2)
+                    take_loss = round(open_price*(1+close_pecentage),2)
                     print("open at : " + str(open_price))
                     print("take profit at : " + str(take_profit))
                     print("take_loss at : " + str(take_loss))
@@ -359,6 +359,8 @@ api_key = os.getenv("API_KEY")
 api_secret = os.getenv("PRIVATE_KEY")
 leverage = os.getenv("LEVERAGE")
 quantity = float(os.getenv("QUANTITY"))
+close_pecentage = float(os.getenv("ADD_PERCENTAGE"))
+
 print(quantity)
 
 #get trade volume last 20 minutes
