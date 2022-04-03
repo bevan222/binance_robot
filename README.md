@@ -1,7 +1,7 @@
 # binance_volume_robot
 
 remember to set .env
-1.API_KEY
+1.API_KEY\n
 2.PRIVATE_KEY
 3.TICKER(coin want to buy)
 4.LEVERAGE(leverage you want to buy)
