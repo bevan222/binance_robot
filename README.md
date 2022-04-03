@@ -1,6 +1,6 @@
-# binance_volume_robot
+# binance_robot
 
-remember to set .env
+1.remember to set .env
 
 - 1.API_KEY
 - 2.PRIVATE_KEY
@@ -10,3 +10,5 @@ remember to set .env
 - 6.RISK_TIME(more higher lower risk , but need bigger commision)
 - 7.ADD_PERCENTAGE(how much percentage the price change to buy)
 - 8.COIN_PRECISION(how many decimal count the coin can be buy)
+
+2.run changlun_copy.py
