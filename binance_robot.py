@@ -2,6 +2,8 @@ from decimal import Decimal
 import os
 import time
 import math
+from tkinter import BOTH
+from turtle import position
 from binance.client import Client
 from datetime import datetime
 from dotenv import load_dotenv
@@ -53,9 +55,7 @@ class volume_robot:
         if self.flatten_count < self.risk_time:
             print("flatten_count: " + str(self.flatten_count))
             print("order mode 1")
-            if self.position_amount() == 0:
-                self.change_leverage(10)
-                
+            if self.position_amount() == 0:                
                 price = float(self.client.futures_mark_price(symbol=self.ticker,pair=self.ticker)['markPrice'])
                 price_up = round(price * (1+float(self.add_percentage)),self.price_precision)
                 price_down = round(price * (1-float(self.add_percentage)),self.price_precision)
@@ -159,6 +159,7 @@ print(api_key)
 print(api_secret)
 
 robot  = volume_robot(ticker,api_key,api_secret,leverage,quantity,risk_time,add_percentage)
+robot.change_leverage(robot.leverage)
 print("leverage: " + str(robot.leverage))
 print(robot.client.futures_position_information(symbol=robot.ticker))
 print("position: " + str(robot.position_amount()))
@@ -175,7 +176,7 @@ while True:
     down =robot.client.futures_get_order(symbol=robot.ticker,orderId=robot.down_order)
     print("up_order inform: " +up['status'] +" "+ up['side'] + " " + up['price'])
     print("down_order inform: " +down['status']+" "+ down['side'] + " " + down['price'])
-    print(robot.client.futures_account_trades()[-1])
+    print(robot.client.futures_account_trades(symbol=robot.ticker)[-1])
     if robot.check_order_deal():
         time.sleep(5)
         robot.create_order()
